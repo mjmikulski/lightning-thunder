@@ -1098,8 +1098,6 @@ def uniform_philox(
     nv_minval = getnv(minval, fd, lc_to_nv_map)
     nv_maxval = getnv(maxval, fd, lc_to_nv_map)
 
-    nvshape = list(getnv(x, fd, lc_to_nv_map) for x in shape)
-
     nv_rng_seed = getnv(seed, fd, lc_to_nv_map)
     nv_rng_offset = getnv(offset, fd, lc_to_nv_map)
 
@@ -1108,7 +1106,7 @@ def uniform_philox(
     return fd.ops.uniform(
         nv_minval,
         nv_maxval,
-        nvshape,
+        shape,
         dtype=nvdtype,
         rng_seed=nv_rng_seed,
         rng_offset=nv_rng_offset,
@@ -1135,9 +1133,7 @@ def broadcast_in_dim(
     a: TensorProxy, shape: list[int], broadcast_dimensions: list[int], *, fd: FusionDefinition, lc_to_nv_map: dict
 ) -> Any:
     nva = getnv(a, fd, lc_to_nv_map)
-    nv_shape = getnv(shape, fd, lc_to_nv_map)
-
-    return fd.ops.broadcast_in_dim(nva, nv_shape, broadcast_dimensions)
+    return fd.ops.broadcast_in_dim(nva, shape, broadcast_dimensions)
 
 
 register_supported(PrimIDs.BROADCAST_IN_DIM, broadcast_in_dim, _broadcast_in_dim_check)
