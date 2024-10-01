@@ -15,7 +15,7 @@ from thunder.core.prims import PrimIDs
 from thunder.core.proxies import TensorProxy, variableify, NumberProxy
 from thunder.core.pytree import tree_flatten, tree_unflatten
 from thunder.core.symbol import has_tags
-from thunder.core.trace import from_trace, TraceCtx, TraceProvenance
+from thunder.core.trace import from_trace, tracectx, TraceCtx, TraceProvenance
 from thunder.core.transforms import bsym_list_to_dag, toposort_bsym_dag, TOPOSORT_ORDER
 from thunder.core.transform_common import dce, order_proxies
 from thunder.executors.passes import update_fusion_call_ctx
@@ -158,6 +158,8 @@ def apply_rematerialization_for_consumer(
     cut_inputs = tuple(filter(lambda x: x.name in cut_names, (*all_produced_vars, *producer.args)))
     new_consumer_args = cut_inputs + external_inputs
 
+    print(new_consumer_args, "'####", cut_inputs, "#####", external_inputs)
+
     # We need to rematerialize the consumer's inputs that are not in the new consumer's inputs.
     rematerialized_inputs = tuple(
         filter(lambda x: x.name not in map(lambda x: x.name, new_consumer_args), consumer.args)
@@ -184,6 +186,8 @@ def apply_rematerialization_for_consumer(
     # The recomputing_symbols may originate from multiple producers.
     # Directly adding these symbols at the beginning of the consumer can disrupt the topological order of subsymbols. To ensure
     # correct execution order, we reorder the new_subsymbols here.
+    print("##############\n", "\n".join(str(bsym) for bsym in new_subsymbols))
+    print("#####", new_consumer_args)
     _, leaves = bsym_list_to_dag(list(new_subsymbols))
     new_subsymbols = toposort_bsym_dag(leaves, TOPOSORT_ORDER.BOTTOM_UP)
     proxy_order = order_proxies(new_subsymbols)
@@ -520,6 +524,8 @@ def rematerialize(trace: TraceCtx) -> TraceCtx:
         TraceCtx: Rematerialized trace and the list of
             rematerialized traces.
     """
+
+    print("######rematerialize start#######", trace)
     start_time_ns = time.perf_counter_ns()
 
     static_consumer_info = utils.consumers(trace)
@@ -574,6 +580,19 @@ def rematerialize(trace: TraceCtx) -> TraceCtx:
     return rematerialized_trace
 
 
+def get_all_output_proxies(bsyms) -> dict[str, ProxyInterface]:
+    output_proxies = {}
+    for bsym in bsyms:
+        subsym_proxy_outputs = get_all_output_proxies(bsym.subsymbols).values()
+        for o in chain(bsym.flat_proxy_outs, subsym_proxy_outputs):
+            known = output_proxies.get(o.name)
+            if known is not None:
+                assert known is o
+            else:
+                output_proxies[o.name] = o
+    return output_proxies
+
+
 def rematerialize_forward_and_backward(fw_trace: TraceCtx, bw_trace: TraceCtx) -> tuple[TraceCtx, TraceCtx]:
     """Apply rematerialization optimization to the forward and backward traces.
 
@@ -590,6 +609,15 @@ def rematerialize_forward_and_backward(fw_trace: TraceCtx, bw_trace: TraceCtx) -
         _update_forward_with_new_saved_for_backward,
     )
 
+    get_all_output_proxies(fw_trace.bound_symbols)
+
+    swapmap = {}
+    with tracectx(bw_trace):
+        bw_proxy_names_except_args = get_all_output_proxies(bw_trace.bound_symbols)
+        for n, p in bw_proxy_names_except_args.items():
+            if n in fw_trace.names:
+                swapmap[variableify(p)] = p.replace()  # copies to new name
+
     def joint_fn(args, kwargs, cotangents):
         pass
 
@@ -599,7 +627,8 @@ def rematerialize_forward_and_backward(fw_trace: TraceCtx, bw_trace: TraceCtx) -
     assert fw_trace.bound_symbols[-1].sym.id == PrimIDs.RETURN
     assert bw_trace.bound_symbols[-1].sym.id == PrimIDs.RETURN
     # Omit the last RETURN symbol
-    joint_extrace.bound_symbols = fw_trace.bound_symbols[:-1] + bw_trace.bound_symbols[:-1]
+    joint_extrace.bound_symbols = fw_trace.bound_symbols[:-1]
+    joint_extrace.bound_symbols.extend(bsym.from_bsym_swap_proxies(swapmap) for bsym in bw_trace.bound_symbols[:-1])
     # Add a new RETURN symbol
     joint_extrace.bound_symbols.append(
         replace(fw_trace.bound_symbols[-1], args=(fw_trace.bound_symbols[-1].args[0], bw_trace.bound_symbols[-1].args))

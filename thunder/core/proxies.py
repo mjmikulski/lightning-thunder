@@ -479,6 +479,18 @@ class CollectionProxy(Proxy):
     def type_string(self) -> str:
         return "Collection"
 
+    def replace(self, **changes):
+        r"""Return a copy of the CollectionProxy object with new values for the specified fields as given to the constructor as arguments.
+        Valid kewword arguments are ``name``, ``coll``, ``tags``.
+        Note that the copy will use the current (environment) tracectx."""
+        kwargs = dict(
+            coll=self.coll,
+            name=self.name,
+            tags=self.tags,
+        )
+        kwargs.update(changes)
+        return CollectionProxy(**kwargs)
+
 
 class TupleProxy(Proxy, tuple):
     def __new__(cls, tup: tuple, *, name: None | str = None, history: None | tuple = None, tags: set | None = None):
