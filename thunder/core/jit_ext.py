@@ -841,12 +841,13 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
         _executor=fwd_bsyms[0]._executor,
     )
     old_scope[-1].append(bsym_of_custom_autograd_func)
-    # Define augmented fwd rule and backward rule on the fly.
 
+    # Define augmented fwd rule and backward rule on the fly.
     augmented_fwd_trace = TraceCtx()
     for bsym in fwd_bsyms:
         augmented_fwd_trace.add_bound_symbol(bsym)
-    augmented_fwd_trace.add_bound_symbol(prims.python_return.bind(output, saved_values, output=()))
+    with tracectx(augmented_fwd_trace):
+        augmented_fwd_trace.add_bound_symbol(prims.python_return.bind(output, saved_values, output=()))
     si = SigInfo(f"augmented_autograd_function_apply_{sym_id}")
     for a in bsym_of_custom_autograd_func.args:
         if isinstance(a, Proxy):
@@ -875,7 +876,8 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
     bwd_tensor_args = grads + tuple(saved_values)
     wrapped_bwd_tensor_args = tree_map(lambda t: wrap(t, provenance=result.provenance), bwd_tensor_args)
     bwd_result = unwrap(_interpret_call(bwd, *(bwd_args + wrapped_bwd_tensor_args)))
-    bwd_trace.bound_symbols.append(prims.python_return.bind(bwd_result, output=()))
+    with tracectx(bwd_trace):
+        bwd_trace.bound_symbols.append(prims.python_return.bind(bwd_result, output=()))
 
     bwd_si = SigInfo(f"bwd_{si.name}")
     for a in saved_values + grads:
