@@ -65,11 +65,13 @@ class clangop:
 #
 
 
-# Checks a tensor's shape and metadata (for use with "constant value" caching)
+# Checks a tensor's shape and metadata (for use with cache check)
 @clangop()
 def check_tensor_shape_and_metadata(t: TensorProxy, /) -> None:
     return prims.check_tensor_shape_and_metadata(
         t,
+        # replace Proxy entries with `-1`s as wild card, as we any value is
+        # allowed for proxy entries
         tuple(t.shape),
         t.device.device_str(),
         dtypes.to_torch_dtype(t.dtype),
@@ -944,6 +946,16 @@ def _advanced_indexing(a: TensorLike, /, key) -> TensorLike:
         res = transpose(res, tuple(permute_shape[: len(new_shape)]))
 
     return res
+
+
+@clangop()
+def copy_with_setitem(a: TensorLike, key, value: TensorLike) -> TensorLike:
+    sig = _get_indexing_signature(key)
+    utils.check(
+        (a.ndim == 0 and (len(sig.basic) + len(sig.advanced)) <= 1) or (a.ndim >= len(sig.basic) + len(sig.advanced)),
+        lambda: f"{key=} tries to index more dimensions than {a.ndim=}",
+    )
+    return prims.copy_with_setitem(a, key, value)
 
 
 # NOTE Advanced indexing is triggered whenever:
