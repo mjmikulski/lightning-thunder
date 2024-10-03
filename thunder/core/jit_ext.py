@@ -800,9 +800,11 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
     fwd_bsyms = []
     jit_ctx.computation_trace.scopes = [fwd_bsyms]
 
-    result = _interpret_call(fwd, *new_fwd_args)
-    output, saved_values = unwrap(result)
-    wrapped_output = wrap(output, provenance=result.provenance)
+    fwd_result = _interpret_call(fwd, *new_fwd_args)
+    if fwd_result is INTERPRETER_SIGNALS.EXCEPTION_RAISED:
+        return fwd_result
+    output, saved_values = unwrap(fwd_result)
+    wrapped_output = wrap(output, provenance=fwd_result.provenance)
 
     unwrapped_fwd_args = tree_map(lambda t: unwrap(t), new_fwd_args)[1:]
 
@@ -874,10 +876,13 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
     grads = sequencify(tree_map(lambda t: TensorProxy(like=t), output))
     bwd_args = (wrap_const(None),)
     bwd_tensor_args = grads + tuple(saved_values)
-    wrapped_bwd_tensor_args = tree_map(lambda t: wrap(t, provenance=result.provenance), bwd_tensor_args)
-    bwd_result = unwrap(_interpret_call(bwd, *(bwd_args + wrapped_bwd_tensor_args)))
+    wrapped_bwd_tensor_args = tree_map(lambda t: wrap(t, provenance=fwd_result.provenance), bwd_tensor_args)
+    bwd_result = _interpret_call(bwd, *(bwd_args + wrapped_bwd_tensor_args))
+    if bwd_result is INTERPRETER_SIGNALS.EXCEPTION_RAISED:
+        return bwd_result
+    unwrapped_bwd_result = unwrap(bwd_result)
     with tracectx(bwd_trace):
-        bwd_trace.bound_symbols.append(prims.python_return.bind(bwd_result, output=()))
+        bwd_trace.bound_symbols.append(prims.python_return.bind(unwrapped_bwd_result, output=()))
 
     bwd_si = SigInfo(f"bwd_{si.name}")
     for a in saved_values + grads:
