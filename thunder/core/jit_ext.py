@@ -848,8 +848,7 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
     augmented_fwd_trace = TraceCtx()
     for bsym in fwd_bsyms:
         augmented_fwd_trace.add_bound_symbol(bsym)
-    with tracectx(augmented_fwd_trace):
-        augmented_fwd_trace.add_bound_symbol(prims.python_return.bind(output, saved_values, output=()))
+    augmented_fwd_trace.add_bound_symbol(prims.python_return.bind(output, saved_values, output=()))
     si = SigInfo(f"augmented_autograd_function_apply_{sym_id}")
     for a in bsym_of_custom_autograd_func.args:
         if isinstance(a, Proxy):
@@ -881,8 +880,7 @@ def _general_jit_torch_ops_higher_order_autograd_function_apply(fwd, bwd, *fwd_a
     if bwd_result is INTERPRETER_SIGNALS.EXCEPTION_RAISED:
         return bwd_result
     unwrapped_bwd_result = unwrap(bwd_result)
-    with tracectx(bwd_trace):
-        bwd_trace.bound_symbols.append(prims.python_return.bind(unwrapped_bwd_result, output=()))
+    bwd_trace.bound_symbols.append(prims.python_return.bind(unwrapped_bwd_result, output=()))
 
     bwd_si = SigInfo(f"bwd_{si.name}")
     for a in saved_values + grads:
