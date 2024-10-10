@@ -3030,6 +3030,7 @@ def forward_and_backward_from_trace(trace: Trace, torch_autograd=False) -> Forwa
     # saved_for_backward = deconstruct_forward_env_for_backward(trace, env)
 
     output_spec = None
+
     def augmented_forward_fn(*args, **kwargs):
         result, env = augmented_forward_pass(*args, trace=trace, **kwargs)
         saved_for_backward = deconstruct_forward_env_for_backward(trace, env)
