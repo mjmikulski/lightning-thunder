@@ -451,7 +451,10 @@ class FusionDefinitionWrapper:
             self.last_inputs = args
 
         # Set device if set in one of the "factory" methods like full, iota, or uniform
-        kwargs = {"device": fd._selected_device} if hasattr(fd, "_selected_device") else {}
+        kwargs = {}
+        if hasattr(fd, "_selected_device"):
+            kwargs["device"] = fd._selected_device
+        kwargs["print_repro"] = True
         with add_markers(self.name):
             return fd.execute(args, **kwargs)
 
