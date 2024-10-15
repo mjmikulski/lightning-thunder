@@ -846,13 +846,14 @@ def benchmark_main(return_metrics_as_json=False, json_path="", **kwargs) -> None
                 bwd_traces = [thunder.last_backward_traces(benchmark.model)]
 
             if "dynamo" in benchmark.compile:
-                assert benchmark.backend is not None
                 for gid, infos in enumerate(benchmark.backend.subgraph_infos):
                     for subgid, thunder_fn in enumerate(infos.thunder_compiled_fns):
+                        print(f"##########\n#Graph{gid}-ThunderFn{subgid} first forward trace\n##########")
+                        print(thunder.last_traces(thunder_fn)[0])
                         print(f"##########\n#Graph{gid}-ThunderFn{subgid} last forward trace\n##########")
                         print(thunder.last_traces(thunder_fn)[-1])
                         print(f"##########\n#Graph{gid}-ThunderFn{subgid} last backward trace\n##########")
-                        print(thunder.last_traces(thunder_fn)[-1])
+                        print(thunder.last_backward_traces(thunder_fn)[-1])
             else:
                 for i, f_traces in enumerate(fwd_traces, start=1):
                     print(f"##########\n#{i}-th ThunderModule\n##########")
